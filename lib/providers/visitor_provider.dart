@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../models/visitor.dart';
 import '../repositories/visitor_repository.dart';
+import '../utils/qr_code_helper.dart';
 
 /// Provider implementing ChangeNotifier for state management:
 /// - Visitor data loading
@@ -147,6 +148,45 @@ class VisitorProvider with ChangeNotifier {
       debugPrint('Error retrieving visitor by ID $id: $e');
       return null;
     }
+  }
+
+  /// Retrieve visitor details by scanned QR code data.
+  /// Intelligently handles:
+  /// - Extracted visitor ID (e.g. VIS001 from "SUMADHURA-PASS:VIS001:VP-0001:9876543210")
+  /// - Direct visitor ID lookup
+  /// - Mobile number lookup fallback
+  /// - Raw code fallback
+  Future<Visitor?> getVisitorByScannedCode(String rawCode) async {
+    final extractedId = QRCodeHelper.extractVisitorId(rawCode);
+
+    // 1. Check local list and API by extracted ID
+    var visitor = await getVisitorById(extractedId);
+    if (visitor != null) return visitor;
+
+    // 2. If extracted ID is different from raw string, try raw string
+    if (extractedId.toLowerCase() != rawCode.trim().toLowerCase()) {
+      visitor = await getVisitorById(rawCode.trim());
+      if (visitor != null) return visitor;
+    }
+
+    // 3. Fallback: Search local list by mobile number if present
+    final mobile = QRCodeHelper.extractMobile(rawCode);
+    if (mobile != null) {
+      final matchByMobile = _visitors.where((v) => v.mobile == mobile).firstOrNull;
+      if (matchByMobile != null) return matchByMobile;
+    }
+
+    // 4. Fallback: Search local list if any visitor's ID or mobile is in rawCode
+    for (final v in _visitors) {
+      if (v.id.isNotEmpty && rawCode.toUpperCase().contains(v.id.toUpperCase())) {
+        return v;
+      }
+      if (v.mobile.isNotEmpty && rawCode.contains(v.mobile)) {
+        return v;
+      }
+    }
+
+    return null;
   }
 
   /// Register a new visitor via POST /visitors

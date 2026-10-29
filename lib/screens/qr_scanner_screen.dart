@@ -4,6 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../providers/visitor_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/qr_code_helper.dart';
 import 'visitor_details_screen.dart';
 
 /// Screen 5: QR Scanner View strictly adhering to the assignment requirements:
@@ -75,16 +76,19 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     await _processScannedId(rawValue.trim());
   }
 
-  Future<void> _processScannedId(String id) async {
+  Future<void> _processScannedId(String rawValue) async {
     setState(() => _isProcessing = true);
 
     try {
       final provider = Provider.of<VisitorProvider>(context, listen: false);
-      final visitor = await provider.getVisitorById(id);
+      final visitor = await provider.getVisitorByScannedCode(rawValue);
 
       if (!mounted) return;
 
       if (visitor != null) {
+        // Haptic feedback
+        HapticFeedback.mediumImpact();
+
         // Successfully retrieved visitor from API -> navigate to details
         await Navigator.of(context).push(
           MaterialPageRoute(
@@ -92,7 +96,8 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           ),
         );
       } else {
-        _showError('Visitor not found with ID: "$id"');
+        final extractedId = QRCodeHelper.extractVisitorId(rawValue);
+        _showError('Visitor not found with ID: "$extractedId"');
       }
     } catch (e) {
       if (mounted) {
